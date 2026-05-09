@@ -1,2 +1,8 @@
 /build_nmake
 /build
+/build_*
+/build_nm
+/build_cmj
+/build_native_tests
+/build_test_addon
+node_modules/

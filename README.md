@@ -1,6 +1,8 @@
-# Poker Bot (NL Hold’em) — C++ library
+# poker-calculations — NL Hold’em engine & odds helpers (C++ core, Node addon)
 
 A small **No-Limit Texas Hold’em** engine and decision helper in modern C++: deck and dealing, game state and betting streets, **7-card hand evaluation**, **Monte Carlo equity** (single- and multi-threaded), a **rule-based `decide_action`** layer (pot odds + simplified chip EV), optional **opponent frequency stats**, and a **`PokerBotInterface` hook** for simulators or other permitted integrations.
+
+The same C++ code is published as the **`poker-calculations` npm package** (native addon via [node-addon-api](https://github.com/nodejs/node-addon-api) + [cmake-js](https://github.com/cmake-js/cmake-js)).
 
 Use this for **your own simulator, research, or APIs you are allowed to automate**. It is not intended to help bypass third-party terms of service on real-money sites.
 
@@ -16,23 +18,61 @@ Use this for **your own simulator, research, or APIs you are allowed to automate
 | **Config** | `BotConfig::load_from_config_file` / `save_to_config_file` (`key=value`, `#` comments) |
 | **Tests** | GoogleTest suite (deck, engine, evaluator, strategy, opponent model, MC, config) |
 
-## Requirements
+## NPM package (recommended)
 
-- **C++20** compiler (MSVC, GCC, or Clang)
-- **CMake 3.16+**
-- **Network** on first configure (GoogleTest is fetched with `FetchContent` when tests are enabled)
+**Requirements:** Node.js 18+, CMake 3.16+, and **MSVC with C++ tools** (e.g. Visual Studio Build Tools — workload “Desktop development with C++”). On Windows you can run `pnpm install` / `npm install` from normal PowerShell: `scripts/compile-addon.js` uses **vswhere** to put `cl.exe` / `nmake` on `PATH` and forces the **NMake Makefiles** generator so CMake does not rely on a stale Visual Studio solution under `build/`.
 
-## Repository layout
+From the repo root:
+
+```bash
+pnpm install
+# or: npm install
+```
+
+This runs `cmake-js` via `scripts/compile-addon.js`, which strips `node_modules` entries from `PATH` so a stray `rc` shim does not replace the Windows SDK resource compiler, sets **`CMAKE_RC_COMPILER`** when needed, and prepends the MSVC **Hostx64\\x64** toolchain directory.
+
+**If configure still fails:** delete the `build` folder and retry. If vswhere cannot find MSVC, open **x64 Native Tools Command Prompt for VS** and run install again, or install the **VC Tools** component.
+
+**Develop / rebuild addon**
+
+```bash
+npm run build
+```
+
+**JavaScript API** (see [`index.d.ts`](index.d.ts)):
+
+- **Native:** `evaluateBestHand`, `evaluateHandStrength`, `evaluateHandCategory`, `simulateHandOutcome`, `parallelHandSimulation`, `decideAction`, `potOddsRatio`, `expectedValueCall`.
+- **Pure JS (`poker-math.js`):** `spr`, `effectiveStack`, `breakevenCallEquity`, `minimumDefenseFrequency`, `stackInBigBlinds`, `potOddsRatioDisplay`, `formatPotOdds`, `ruleOfFourEquity`, `ruleOfTwoEquity`, `impliedBreakevenFutureWin`, `bluffToValueRatio`.
+
+Cards are strings such as `"Ah"` or `"Td"`; optional `"10h"` for ten-high.
+
+**Example**
+
+```bash
+node examples/demo.mjs
+```
+
+**Native C++ tests only** (separate CMake build dir `build_native_tests`, no Node addon):
+
+```bash
+npm test
+```
+
+On Windows this expects the same MSVC-on-PATH setup as above.
+
+## Plain CMake (library only)
+
+### Repository layout
 
 ```
 include/poker/     Public headers (Card, Deck, GameEngine, HandEvaluator, …)
 src/               Implementations
+native/            Node-API binding (built when CMAKE_JS_INC is set by cmake-js)
+poker-math.js      Chip / odds formulas (SPR, MDF, rule of 2 & 4, …)
 tests/             Unit tests
-examples/          Sample program linking `poker_lib`
-CMakeLists.txt     Library, optional `poker_example`, optional `poker_tests`
+examples/          demo.mjs (Node)
+CMakeLists.txt     Static poker_lib; optional poker_tests; optional poker_calculations.node when built by cmake-js
 ```
-
-## Build
 
 ### Generic (single-configuration generators)
 
@@ -46,13 +86,6 @@ Run tests:
 ```bash
 cd build
 ctest --output-on-failure
-```
-
-Run the example (if built):
-
-```bash
-./poker_example          # Unix
-poker_example.exe        # Windows
 ```
 
 ### Windows: MSVC with NMake (typical when `cl` is not on PATH)
@@ -70,10 +103,11 @@ ctest --output-on-failure
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `POKER_BUILD_TESTS` | `ON` | Build `poker_tests` and fetch GoogleTest |
-| `POKER_BUILD_EXAMPLES` | `ON` | Build `poker_example` |
+| `POKER_BUILD_TESTS` | `ON` when not using cmake-js; **`OFF`** when `CMAKE_JS_INC` is set (npm install path) | Build `poker_tests` and fetch GoogleTest |
 
-Disable tests (no GTest download):
+When **cmake-js** configures the project, it defines `CMAKE_JS_INC` and only **`poker_calculations.node`** plus **`poker_lib`** are built—tests are skipped so `npm install` does not download GoogleTest.
+
+Disable tests manually:
 
 ```bash
 cmake -S . -B build -DPOKER_BUILD_TESTS=OFF
@@ -100,7 +134,7 @@ rng_seed=2463534242
 
 Load with `BotConfig::load_from_config_file("bot.txt")`.
 
-## Quick API sketch
+## Quick C++ API sketch
 
 - **State & engine**: `poker::PokerGameState`, `poker::GameEngine::start_new_hand`, `apply_action`, `advance_phase_if_ready`
 - **Hands**: `poker::evaluate_best_hand`, `poker::evaluate_hand_strength`, `poker::evaluate_hand`
@@ -110,13 +144,9 @@ Load with `BotConfig::load_from_config_file("bot.txt")`.
 
 Headers live under `include/poker/`. Link against **`poker_lib`**.
 
-## Example
-
-See [`examples/simple_bot_main.cpp`](examples/simple_bot_main.cpp): starts a two-player hand, prints a `Decision`, and prints rough pre-flop MC equity.
-
 ## Contributing / tuning
 
-Strategy thresholds and MC counts are intentionally centralized in **`BotConfig`**. Adjust and re-run **`ctest`** after changes; MC-heavy tests assume statistical bands (e.g. AA pre-flop equity vs one random hand).
+Strategy thresholds and MC counts are intentionally centralized in **`BotConfig`**. Adjust and re-run **`npm test`** or **`ctest`** after changes; MC-heavy tests assume statistical bands (e.g. AA pre-flop equity vs one random hand).
 
 ## License
 

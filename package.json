@@ -1,0 +1,48 @@
+{
+  "name": "poker-calculations",
+  "version": "1.0.0",
+  "description": "NL Hold'em hand evaluation, Monte Carlo equity, pot-odds / SPR / MDF helpers, and strategy helpers; native C++ core with a Node.js addon.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "directories": {
+    "example": "examples",
+    "test": "tests"
+  },
+  "scripts": {
+    "install": "node scripts/compile-addon.js compile",
+    "build": "node scripts/compile-addon.js compile",
+    "rebuild": "node scripts/compile-addon.js rebuild",
+    "test": "npm run test:native",
+    "test:native": "node scripts/run-native-tests.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DevomB/Poker-Overlay.git"
+  },
+  "keywords": [
+    "poker",
+    "holdem",
+    "nlhe",
+    "equity",
+    "monte-carlo",
+    "pot-odds",
+    "spr",
+    "mdf",
+    "native-addon",
+    "napi"
+  ],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/DevomB/Poker-Overlay/issues"
+  },
+  "homepage": "https://github.com/DevomB/Poker-Overlay#readme",
+  "dependencies": {
+    "bindings": "^1.5.0",
+    "cmake-js": "^8.0.0",
+    "node-addon-api": "^8.7.0"
+  }
+}

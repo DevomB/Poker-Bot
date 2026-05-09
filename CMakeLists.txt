@@ -5,10 +5,16 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(POKER_BUILD_TESTS "Build unit tests" ON)
-option(POKER_BUILD_EXAMPLES "Build example binaries" ON)
+# cmake-js passes CMAKE_JS_INC; skip heavy dev targets so npm install stays lean.
+if(DEFINED CMAKE_JS_INC AND NOT CMAKE_JS_INC STREQUAL "")
+    set(_poker_build_tests_default OFF)
+else()
+    set(_poker_build_tests_default ON)
+endif()
 
-add_library(poker_lib
+option(POKER_BUILD_TESTS "Build unit tests" ${_poker_build_tests_default})
+
+add_library(poker_lib STATIC
     src/card.cpp
     src/deck.cpp
     src/game_engine.cpp
@@ -23,11 +29,6 @@ target_include_directories(poker_lib PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 target_compile_definitions(poker_lib PUBLIC $<$<BOOL:${WIN32}>:NOMINMAX>)
-
-if(POKER_BUILD_EXAMPLES)
-    add_executable(poker_example examples/simple_bot_main.cpp)
-    target_link_libraries(poker_example PRIVATE poker_lib)
-endif()
 
 if(POKER_BUILD_TESTS)
     include(FetchContent)
@@ -53,4 +54,22 @@ if(POKER_BUILD_TESTS)
     endif()
     include(GoogleTest)
     gtest_discover_tests(poker_tests)
+endif()
+
+if(DEFINED CMAKE_JS_INC AND NOT CMAKE_JS_INC STREQUAL "")
+    execute_process(
+        COMMAND node -p "require('node-addon-api').include"
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        OUTPUT_VARIABLE NODE_ADDON_API_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    string(REPLACE "\n" "" NODE_ADDON_API_DIR "${NODE_ADDON_API_DIR}")
+    string(REPLACE "\"" "" NODE_ADDON_API_DIR "${NODE_ADDON_API_DIR}")
+
+    add_library(poker_calculations SHARED native/binding.cpp ${CMAKE_JS_SRC})
+    set_target_properties(poker_calculations PROPERTIES PREFIX "" SUFFIX ".node")
+    target_include_directories(poker_calculations PRIVATE ${CMAKE_JS_INC} ${NODE_ADDON_API_DIR})
+    target_link_libraries(poker_calculations PRIVATE poker_lib ${CMAKE_JS_LIB})
+    target_compile_definitions(poker_calculations PRIVATE NAPI_VERSION=8)
+    target_compile_definitions(poker_calculations PRIVATE $<$<BOOL:${WIN32}>:NOMINMAX>)
 endif()

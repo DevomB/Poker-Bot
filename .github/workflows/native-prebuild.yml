@@ -1,19 +1,43 @@
-# Build native addons per OS and, on version tags only, publish to npm with merged prebuilds.
+# Build native addons per OS and publish to npm when package.json "version" is new on the registry.
+#
+# Trigger: push to main that changes package.json (e.g. version bump), or workflow_dispatch.
+# No git tags required — CI skips build/publish if that exact version already exists on npm.
 #
 # Secrets (repository → Settings → Secrets and variables → Actions):
 #   NPM_TOKEN — npm "Automation" or "Granular Access Token" with publish permission for this package.
-# No self-hosted runner or extra server is required for publishing.
 
 name: Native prebuilds & npm publish
 
 on:
   workflow_dispatch:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+    paths:
+      - 'package.json'
+
+concurrency:
+  group: npm-publish-${{ github.workflow }}
+  cancel-in-progress: false
 
 jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.gate.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - id: gate
+        run: node scripts/should-npm-publish.js
+
   build:
+    needs: release-gate
+    if: needs.release-gate.outputs.publish == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -64,9 +88,9 @@ jobs:
 
   publish:
     name: Publish to npm
-    needs: build
+    needs: [release-gate, build]
+    if: needs.release-gate.outputs.publish == 'true'
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: read
       id-token: write
@@ -86,11 +110,6 @@ jobs:
 
       - name: Assemble prebuilds/
         run: node scripts/assemble-prebuilds.js _native_bins
-
-      - name: Verify package.json matches Git tag
-        env:
-          GITHUB_REF_NAME: ${{ github.ref_name }}
-        run: node scripts/verify-tag-version.js
 
       - name: Publish to npm
         run: npm publish --provenance --access public

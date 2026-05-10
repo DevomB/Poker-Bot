@@ -1,0 +1,98 @@
+# Build native addons per OS and, on version tags only, publish to npm with merged prebuilds.
+#
+# Secrets (repository → Settings → Secrets and variables → Actions):
+#   NPM_TOKEN — npm "Automation" or "Granular Access Token" with publish permission for this package.
+# No self-hosted runner or extra server is required for publishing.
+
+name: Native prebuilds & npm publish
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            tuple: win32-x64
+          - os: ubuntu-latest
+            tuple: linux-x64
+          - os: macos-latest
+            tuple: darwin-arm64
+          # Intel macOS runners change labels over time; adjust if this job fails.
+          - os: macos-13
+            tuple: darwin-x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install CMake (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake
+
+      - name: Compile native addon (cmake-js)
+        run: node scripts/build-native.js compile
+        shell: bash
+
+      - name: Stage prebuild (node.napi.node)
+        run: node scripts/stage-prebuild.js ${{ matrix.tuple }}
+        shell: bash
+
+      - name: Flatten artifact name for merge job
+        run: cp "prebuilds/${{ matrix.tuple }}/node.napi.node" "${{ matrix.tuple }}.napi.node"
+        shell: bash
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.tuple }}
+          path: ${{ matrix.tuple }}.napi.node
+
+  publish:
+    name: Publish to npm
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: _native_bins
+          merge-multiple: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Assemble prebuilds/
+        run: node scripts/assemble-prebuilds.js _native_bins
+
+      - name: Verify package.json matches Git tag
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: node scripts/verify-tag-version.js
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

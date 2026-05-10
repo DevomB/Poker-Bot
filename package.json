@@ -1,7 +1,7 @@
 {
   "name": "poker-calculations",
   "version": "1.0.0",
-  "description": "NL Hold'em hand evaluation, Monte Carlo equity, pot-odds / SPR / MDF helpers, and strategy helpers; native C++ core with a Node.js addon.",
+  "description": "NL Hold'em hand evaluation, Monte Carlo equity, pot-odds / SPR / MDF helpers; C++ core shipped as prebuilt native addons (no compiler needed for npm install).",
   "main": "index.js",
   "types": "index.d.ts",
   "directories": {
@@ -9,9 +9,9 @@
     "test": "tests"
   },
   "scripts": {
-    "install": "node scripts/compile-addon.js compile",
-    "build": "node scripts/compile-addon.js compile",
-    "rebuild": "node scripts/compile-addon.js rebuild",
+    "build:native": "node scripts/build-native.js compile",
+    "rebuild:native": "node scripts/build-native.js rebuild",
+    "prepack": "node scripts/check-prebuilds.js",
     "test": "npm run test:native",
     "test:native": "node scripts/run-native-tests.js"
   },
@@ -32,7 +32,8 @@
     "spr",
     "mdf",
     "native-addon",
-    "napi"
+    "napi",
+    "prebuild"
   ],
   "author": "",
   "license": "ISC",
@@ -41,8 +42,17 @@
   },
   "homepage": "https://github.com/DevomB/Poker-Overlay#readme",
   "dependencies": {
-    "bindings": "^1.5.0",
+    "node-gyp-build": "^4.8.4"
+  },
+  "devDependencies": {
     "cmake-js": "^8.0.0",
     "node-addon-api": "^8.7.0"
-  }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "poker-math.js",
+    "prebuilds",
+    "README.md"
+  ]
 }

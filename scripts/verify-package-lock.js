@@ -1,0 +1,36 @@
+/**
+ * Fail if package-lock.json does not match package.json (same check npm ci relies on).
+ * Run after editing dependencies in package.json; fix with: npm run sync-lock
+ */
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+
+const root = path.join(__dirname, '..');
+const lockPath = path.join(root, 'package-lock.json');
+
+if (!fs.existsSync(lockPath)) {
+  console.error('Missing package-lock.json. Run: npm install');
+  process.exit(1);
+}
+
+const before = fs.readFileSync(lockPath, 'utf8');
+
+execSync('npm install --package-lock-only', {
+  cwd: root,
+  stdio: 'inherit',
+  shell: true,
+  env: process.env,
+});
+
+const after = fs.readFileSync(lockPath, 'utf8');
+if (before !== after) {
+  console.error(
+    'package-lock.json is out of sync with package.json. Run: npm run sync-lock',
+  );
+  process.exit(1);
+}
+
+console.log('package-lock.json matches package.json');

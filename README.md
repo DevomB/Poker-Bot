@@ -47,15 +47,11 @@ Use the same `<platform-arch>` tuple [`node-gyp-build` expects](https://github.c
 Publishing uses workflow [`.github/workflows/native-prebuild.yml`](.github/workflows/native-prebuild.yml):
 
 1. Add a repository secret **`NPM_TOKEN`** (npmjs.com → Access Tokens → classic **Automation** token, or a granular token with publish rights for `poker-calculations`).
-2. Bump **`package.json`** `version` (e.g. `1.0.1`).
-3. Commit and push, then tag **exactly** that version:
+2. Bump **`package.json`** `version` (e.g. `1.0.1`) and push to **`main`**.
 
-```bash
-git tag v1.0.1
-git push origin main --tags
-```
+The workflow runs when **`package.json` changes** on `main`. It asks the registry whether that **`name@version` already exists**; if not, it builds all four native targets, merges them into `prebuilds/*/node.napi.node`, runs **`npm publish --provenance`**, and uploads the tarball to the public npm registry. **No git tags** — the version field is the only release input.
 
-The workflow builds all four native targets, merges them into `prebuilds/*/node.napi.node`, checks that **`vX.Y.Z` matches `package.json`**, runs **`npm publish --provenance`**, and uploads the tarball to the public npm registry.
+You can also run the workflow manually from the Actions tab (**workflow_dispatch**). If the current `package.json` version is already published, the workflow skips build and publish.
 
 If publish fails on **`--provenance`** (registry or npm version), edit the workflow step to plain **`npm publish --access public`** (same secret).
 

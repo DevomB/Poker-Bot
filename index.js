@@ -1,30 +1,19 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const math = require('./poker-math');
 
-function findNativeModule() {
-  const root = __dirname;
-  const candidates = [
-    path.join(root, 'build', 'Release', 'poker_calculations.node'),
-    path.join(root, 'build', 'Debug', 'poker_calculations.node'),
-    path.join(root, 'build', 'poker_calculations.node'),
-    path.join(root, 'build', 'Release', 'poker_overlay.node'),
-    path.join(root, 'build', 'Debug', 'poker_overlay.node'),
-    path.join(root, 'build', 'poker_overlay.node'),
-  ];
-  for (const p of candidates) {
-    if (fs.existsSync(p)) {
-      return require(p);
-    }
-  }
-  try {
-    return require('bindings')('poker_calculations');
-  } catch (e) {
-    return require('bindings')('poker_overlay');
-  }
+let native;
+try {
+  native = require('node-gyp-build')(path.join(__dirname));
+} catch (err) {
+  const msg =
+    '[poker-calculations] Native addon failed to load.\n' +
+    '  Published installs ship prebuilt binaries (no compiler needed).\n' +
+    '  From a git clone: npm ci && npm run build:native && node scripts/stage-prebuild.js <platform-arch>\n' +
+    '  (CMake + C++20 toolchain required; see README.)\n';
+  err.message = msg + '\nOriginal error: ' + err.message;
+  throw err;
 }
 
-const native = findNativeModule();
 module.exports = Object.assign({}, native, math);

@@ -9,33 +9,45 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const buildDir = path.join(root, 'build_native_tests');
 
-/** Prefer Windows SDK rc.exe so CMake never picks an unrelated `rc` from PATH. */
-function findWindowsRcCompiler() {
-  const base = path.join(process.env['ProgramFiles(x86)'] || '', 'Windows Kits', '10', 'bin');
-  if (!fs.existsSync(base)) {
-    return null;
-  }
+/** Latest rc.exe + mt.exe under Windows Kits\\10\\bin\\<ver>\\x64 (both Program Files roots). */
+function findWindowsKitX64Tools() {
+  const roots = [
+    path.join(process.env['ProgramFiles(x86)'] || '', 'Windows Kits', '10', 'bin'),
+    path.join(process.env.ProgramFiles || '', 'Windows Kits', '10', 'bin'),
+  ];
   let bestVer = '';
-  let bestPath = null;
-  try {
-    for (const name of fs.readdirSync(base)) {
-      if (!/^\d/.test(name)) {
-        continue;
-      }
-      const candidate = path.join(base, name, 'x64', 'rc.exe');
-      if (fs.existsSync(candidate) && name > bestVer) {
-        bestVer = name;
-        bestPath = candidate;
-      }
+  let best = null;
+  for (const base of roots) {
+    if (!fs.existsSync(base)) {
+      continue;
     }
-  } catch {
-    return null;
+    try {
+      for (const name of fs.readdirSync(base)) {
+        if (!/^\d/.test(name)) {
+          continue;
+        }
+        const rc = path.join(base, name, 'x64', 'rc.exe');
+        const mt = path.join(base, name, 'x64', 'mt.exe');
+        if (fs.existsSync(rc) && fs.existsSync(mt) && name > bestVer) {
+          bestVer = name;
+          best = { rc, mt, binDir: path.join(base, name, 'x64') };
+        }
+      }
+    } catch {
+      /* ignore */
+    }
   }
-  return bestPath;
+  return best;
 }
 
 function sanitizedEnv() {
   const env = { ...process.env };
+  if (process.platform === 'win32') {
+    const kit = findWindowsKitX64Tools();
+    if (kit) {
+      env.PATH = kit.binDir + path.delimiter + (env.PATH || '');
+    }
+  }
   if (env.PATH) {
     env.PATH = env.PATH.split(path.delimiter)
       .filter((p) => {
@@ -68,9 +80,13 @@ const isWin = process.platform === 'win32';
 const baseConfigure = ['-S', root, '-B', buildDir, '-DPOKER_BUILD_TESTS=ON'];
 
 if (isWin) {
-  const rc = findWindowsRcCompiler();
-  const rcFlag = rc ? [`-DCMAKE_RC_COMPILER=${rc.replace(/\\/g, '/')}`] : [];
-  run('cmake', [...baseConfigure, '-G', 'NMake Makefiles', '-DCMAKE_BUILD_TYPE=Release', ...rcFlag]);
+  const kit = findWindowsKitX64Tools();
+  const kitFlags = [];
+  if (kit) {
+    kitFlags.push(`-DCMAKE_RC_COMPILER=${kit.rc.replace(/\\/g, '/')}`);
+    kitFlags.push(`-DCMAKE_MT=${kit.mt.replace(/\\/g, '/')}`);
+  }
+  run('cmake', [...baseConfigure, '-G', 'NMake Makefiles', '-DCMAKE_BUILD_TYPE=Release', ...kitFlags]);
   run('cmake', ['--build', buildDir]);
   run('ctest', ['--test-dir', buildDir, '--output-on-failure', '-C', 'Release']);
 } else {

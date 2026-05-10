@@ -1,3 +1,7 @@
+/**
+ * Runnable smoke test for `poker-calculations` (CommonJS entry via createRequire).
+ * API surface: ../index.d.ts
+ */
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);

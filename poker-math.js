@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * Pure JavaScript helpers for common NLHE chip and odds calculations.
- * For Monte Carlo / hand strength use the native addon methods.
+ * Pure JS odds/stack helpers (SPR, MDF, rule of 2 & 4, …).
+ * Monte Carlo and hand ordering live in the native addon — keep this module allocation-free and obvious.
  */
 
 function assertNonNegFinite(name, x) {
@@ -17,7 +17,11 @@ function assertPositiveFinite(name, x) {
   }
 }
 
-/** Stack-to-pot ratio: effective stack divided by pot (common SPR metric). */
+function clamp01(x) {
+  return Math.max(0, Math.min(1, x));
+}
+
+/** Stack-to-pot ratio: effective stack divided by pot. */
 function spr(potChips, effectiveStackChips) {
   assertNonNegFinite('potChips', potChips);
   assertNonNegFinite('effectiveStackChips', effectiveStackChips);
@@ -27,67 +31,51 @@ function spr(potChips, effectiveStackChips) {
   return effectiveStackChips / potChips;
 }
 
-/** Minimum of stacks (typical effective stack when two players cover each other). */
+/** Minimum of stacks (two-player effective stack when both cover). */
 function effectiveStack(...stacks) {
-  const nums = stacks.filter((x) => typeof x === 'number');
-  if (nums.length === 0) {
+  if (stacks.length === 0) {
     return 0;
   }
-  for (const x of nums) {
+  for (const x of stacks) {
     assertNonNegFinite('stack', x);
   }
-  return Math.min(...nums);
+  return Math.min(...stacks);
 }
 
 /**
- * Equity needed to break even on a pure chip call (pot before your call, amount to call).
- * Same as price you're getting: toCall / (pot + toCall).
+ * Equity needed to break even on a pure chip call: toCall / (potBeforeCall + toCall).
  */
 function breakevenCallEquity(potBeforeCall, toCall) {
   assertNonNegFinite('potBeforeCall', potBeforeCall);
   assertNonNegFinite('toCall', toCall);
   const denom = potBeforeCall + toCall;
-  if (denom <= 0) {
-    return 0;
-  }
-  if (toCall === 0) {
+  if (denom <= 0 || toCall === 0) {
     return 0;
   }
   return toCall / denom;
 }
 
-/**
- * Minimum defense frequency when facing a bet (pot before opponent bets, size of their bet).
- * Fraction of your range you must continue with so their automatic bluffs cannot profit.
- */
+/** MDF: pot / (pot + bet) after villain bets into `potBeforeOpponentBet`. */
 function minimumDefenseFrequency(potBeforeOpponentBet, opponentBetSize) {
   assertNonNegFinite('potBeforeOpponentBet', potBeforeOpponentBet);
   assertNonNegFinite('opponentBetSize', opponentBetSize);
   const denom = potBeforeOpponentBet + opponentBetSize;
-  if (denom <= 0) {
-    return 0;
-  }
-  return potBeforeOpponentBet / denom;
+  return denom <= 0 ? 0 : potBeforeOpponentBet / denom;
 }
 
-/** Chip stack expressed in big blinds. */
 function stackInBigBlinds(stackChips, bigBlind) {
   assertNonNegFinite('stackChips', stackChips);
   assertPositiveFinite('bigBlind', bigBlind);
   return stackChips / bigBlind;
 }
 
-/** Pot odds expressed as pot : toCall (e.g. 3.5 means 3.5:1). */
+/** Pot odds as pot : toCall (e.g. 3.5 ⇒ 3.5:1). */
 function potOddsRatioDisplay(potBeforeCall, toCall) {
   assertNonNegFinite('potBeforeCall', potBeforeCall);
   assertNonNegFinite('toCall', toCall);
-  if (toCall === 0) {
-    return Infinity;
-  }
-  return potBeforeCall / toCall;
+  return toCall === 0 ? Infinity : potBeforeCall / toCall;
 }
 
-/** Human-readable "x.xx:1" pot odds string. */
 function formatPotOdds(potBeforeCall, toCall, decimals = 2) {
   assertNonNegFinite('potBeforeCall', potBeforeCall);
   assertNonNegFinite('toCall', toCall);
@@ -99,19 +87,14 @@ function formatPotOdds(potBeforeCall, toCall, decimals = 2) {
   return `${f}:1`;
 }
 
-/**
- * Rule of 4 — approximate chance to hit (~two cards to come), as a fraction 0..1.
- * Pass number of outs (non-double-counted).
- */
+/** Rule of 4 — two cards to come; outs capped defensively. */
 function ruleOfFourEquity(outs) {
   assertNonNegFinite('outs', outs);
   const o = Math.min(outs, 48);
   return Math.min(1, (o * 4) / 100);
 }
 
-/**
- * Rule of 2 — approximate chance to hit (~one card to come), as a fraction 0..1.
- */
+/** Rule of 2 — one card to come. */
 function ruleOfTwoEquity(outs) {
   assertNonNegFinite('outs', outs);
   const o = Math.min(outs, 48);
@@ -119,9 +102,7 @@ function ruleOfTwoEquity(outs) {
 }
 
 /**
- * Average total extra chips you expect to win on later streets (beyond the current
- * pot + call) so that calling breaks even, given your showdown equity after paying `toCall`.
- * Same pot semantics as `expectedValueCall` (pot chips in the middle before you call).
+ * Implied-odds breakeven: average extra future win (beyond current pot + call) so a call is neutral.
  * Returns Infinity if equity is 0.
  */
 function impliedBreakevenFutureWin(potBeforeCall, toCall, equity) {
@@ -130,7 +111,7 @@ function impliedBreakevenFutureWin(potBeforeCall, toCall, equity) {
   if (typeof equity !== 'number' || !Number.isFinite(equity)) {
     throw new TypeError('equity must be a finite number');
   }
-  const e = Math.max(0, Math.min(1, equity));
+  const e = clamp01(equity);
   if (e <= 0) {
     return Infinity;
   }
@@ -138,18 +119,12 @@ function impliedBreakevenFutureWin(potBeforeCall, toCall, equity) {
   return Math.max(0, ((1 - e) * toCall) / e - immediateWinTotal);
 }
 
-/**
- * Polarized river betting: approximate bluff-to-value ratio Bet / (Pot + 2×Bet)
- * (Pot before villain's bet).
- */
+/** Polarized river ratio Bet / (Pot + 2×Bet). */
 function bluffToValueRatio(potBeforeBet, betSize) {
   assertNonNegFinite('potBeforeBet', potBeforeBet);
   assertNonNegFinite('betSize', betSize);
   const denom = potBeforeBet + 2 * betSize;
-  if (denom <= 0) {
-    return 0;
-  }
-  return betSize / denom;
+  return denom <= 0 ? 0 : betSize / denom;
 }
 
 module.exports = {

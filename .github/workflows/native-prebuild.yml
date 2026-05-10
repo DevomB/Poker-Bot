@@ -1,12 +1,11 @@
 # Build native addons per OS and publish to npm when package.json "version" is new on the registry.
 #
-# Trigger: push to main that changes package.json (e.g. version bump), or workflow_dispatch.
-# No git tags required — CI skips build/publish if that exact version already exists on npm.
+# Trigger: after "Sync package lockfile" completes on main (so the lockfile commit exists before
+# npm ci), or workflow_dispatch. No git tags required — CI skips build/publish if that exact
+# version already exists on npm.
 #
-# Lockfile: npm ci needs package-lock.json to match package.json. On a push that only changed
-# package.json, sync-package-lock.yml may fix the lock in a follow-up commit; this job still runs
-# on the first push, so we refresh the lock on the runner before npm ci (same as npm run sync-lock).
-# Commit package-lock.json when you change deps so local and CI stay aligned.
+# Lockfile: runs after sync-package-lock.yml so checkout includes an up-to-date package-lock.json.
+# Each job checks out branch main at latest (fetch-depth 0), not the triggering SHA.
 #
 # Secrets (repository → Settings → Secrets and variables → Actions):
 #   NPM_TOKEN — npm "Automation" or "Granular Access Token" with publish permission for this package.
@@ -15,11 +14,11 @@ name: Native prebuilds & npm publish
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'package.json'
+  workflow_run:
+    workflows:
+      - Sync package lockfile
+    types:
+      - completed
 
 concurrency:
   group: npm-publish-${{ github.workflow }}
@@ -27,11 +26,15 @@ concurrency:
 
 jobs:
   release-gate:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     outputs:
       publish: ${{ steps.gate.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -62,14 +65,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-
-      - name: Align package-lock.json with package.json
-        run: npm install --package-lock-only
 
       - name: Install dependencies
         run: npm ci
@@ -105,6 +108,9 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:

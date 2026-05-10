@@ -28,6 +28,8 @@ add_library(poker_lib STATIC
 target_include_directories(poker_lib PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+# Required on Linux (and other ELF): static lib is linked into poker_calculations.node (SHARED).
+set_target_properties(poker_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(poker_lib PUBLIC $<$<BOOL:${WIN32}>:NOMINMAX>)
 
 if(POKER_BUILD_TESTS)

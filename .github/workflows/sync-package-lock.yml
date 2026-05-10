@@ -1,0 +1,46 @@
+# Regenerates package-lock.json from package.json and pushes if it changed.
+# Triggers on pushes that touch package.json only (not lock-only commits), so this
+# does not loop. The follow-up push updates package-lock.json and runs package-lock.yml.
+# Fork PRs: pushes land on the fork; this workflow runs on your repo's pushes only—
+# contributors from forks should run: npm run sync-lock and push.
+name: Sync package lockfile
+
+on:
+  push:
+    paths:
+      - package.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-package-lock-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Regenerate lockfile and push if changed
+        run: |
+          npm install --package-lock-only
+          git add package-lock.json
+          if git diff --staged --quiet; then
+            echo "package-lock.json already matches package.json"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: sync package-lock.json"
+          git push

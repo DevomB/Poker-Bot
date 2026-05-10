@@ -3,8 +3,10 @@
 # Trigger: push to main that changes package.json (e.g. version bump), or workflow_dispatch.
 # No git tags required — CI skips build/publish if that exact version already exists on npm.
 #
-# Lockfile: uses npm ci (reproducible install). Do not regenerate package-lock.json here — commit it.
-# After changing dependencies in package.json, run locally: npm run sync-lock
+# Lockfile: npm ci needs package-lock.json to match package.json. On a push that only changed
+# package.json, sync-package-lock.yml may fix the lock in a follow-up commit; this job still runs
+# on the first push, so we refresh the lock on the runner before npm ci (same as npm run sync-lock).
+# Commit package-lock.json when you change deps so local and CI stay aligned.
 #
 # Secrets (repository → Settings → Secrets and variables → Actions):
 #   NPM_TOKEN — npm "Automation" or "Granular Access Token" with publish permission for this package.
@@ -65,6 +67,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+
+      - name: Align package-lock.json with package.json
+        run: npm install --package-lock-only
 
       - name: Install dependencies
         run: npm ci

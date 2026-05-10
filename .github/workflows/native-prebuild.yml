@@ -3,6 +3,9 @@
 # Trigger: push to main that changes package.json (e.g. version bump), or workflow_dispatch.
 # No git tags required — CI skips build/publish if that exact version already exists on npm.
 #
+# Lockfile: uses npm ci (reproducible install). Do not regenerate package-lock.json here — commit it.
+# After changing dependencies in package.json, run locally: npm run sync-lock
+#
 # Secrets (repository → Settings → Secrets and variables → Actions):
 #   NPM_TOKEN — npm "Automation" or "Granular Access Token" with publish permission for this package.
 
@@ -48,8 +51,9 @@ jobs:
             tuple: linux-x64
           - os: macos-latest
             tuple: darwin-arm64
-          # Intel macOS runners change labels over time; adjust if this job fails.
-          - os: macos-13
+          # Intel (x64) macOS: avoid macos-13 — deprecated, tiny pool, multi-hour queues / brownouts.
+          # Use the dedicated Intel image: https://github.blog/changelog/2025-09-19-github-actions-macos-13-runner-image-is-closing-down/
+          - os: macos-15-intel
             tuple: darwin-x64
 
     runs-on: ${{ matrix.os }}

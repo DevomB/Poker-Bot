@@ -1,6 +1,6 @@
 /**
  * Maintainer / CI only: compile the native addon from C++ (CMake + cmake-js).
- * End users never run this — they load prebuilt `prebuilds/*/node.napi.node`.
+ * End users never run this — they load prebuilt binaries under prebuilds (node-gyp-build).
  */
 const { spawnSync } = require('child_process');
 const path = require('path');

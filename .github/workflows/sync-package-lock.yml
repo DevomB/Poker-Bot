@@ -1,6 +1,7 @@
 # Regenerates package-lock.json from package.json and pushes if it changed.
 # Triggers on pushes that touch package.json only (not lock-only commits), so this
-# does not loop. The follow-up push updates package-lock.json and runs package-lock.yml.
+# does not loop. Follow-up workflows (e.g. native prebuild) should use workflow_run
+# after this workflow so they see the lockfile commit on the branch.
 # Fork PRs: pushes land on the fork; this workflow runs on your repo's pushes only—
 # contributors from forks should run: npm run sync-lock and push.
 name: Sync package lockfile
@@ -44,3 +45,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore: sync package-lock.json"
           git push
+
+      - name: Verify committed lockfile matches package.json
+        run: npm run verify-lock

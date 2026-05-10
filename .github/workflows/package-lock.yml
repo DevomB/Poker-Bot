@@ -1,14 +1,9 @@
-# Fail fast when package.json was edited without updating package-lock.json.
+# Fail fast when package.json was edited without updating package-lock.json (PRs).
+# On main, sync-package-lock.yml updates the lock and runs npm run verify-lock after push.
 name: Package lockfile
 
 on:
   pull_request:
-    paths:
-      - package.json
-      - package-lock.json
-  push:
-    branches:
-      - main
     paths:
       - package.json
       - package-lock.json
